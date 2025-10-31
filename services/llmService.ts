@@ -1,19 +1,30 @@
 import { StoredFile, Task, TaskOutput } from '../types';
 import { GeminiService } from './geminiService';
 import { OpenRouterService, OpenRouterModel, fetchOpenRouterModels } from './openrouterService';
+import { PollinationsService, PollinationsModel, fetchPollinationsModels } from './pollinationsService';
 
-export { fetchOpenRouterModels };
-export type { OpenRouterModel };
+export { fetchOpenRouterModels, fetchPollinationsModels };
+export type { OpenRouterModel, PollinationsModel };
 
 export class LLMService {
-  private service: GeminiService | OpenRouterService;
+  private service: GeminiService | OpenRouterService | PollinationsService;
+  private provider: 'gemini' | 'openrouter' | 'pollinations';
 
-  constructor(provider: 'gemini' | 'openrouter', apiKey: string) {
-    if (provider === 'gemini') {
-      // Per guidelines, Gemini API key is from process.env
-      this.service = new GeminiService(process.env.API_KEY || '');
-    } else {
-      this.service = new OpenRouterService(apiKey);
+  constructor(provider: 'gemini' | 'openrouter' | 'pollinations', apiKey: string) {
+    this.provider = provider;
+    switch (provider) {
+      case 'gemini':
+        this.service = new GeminiService(apiKey);
+        break;
+      case 'openrouter':
+        this.service = new OpenRouterService(apiKey);
+        break;
+      case 'pollinations':
+        this.service = new PollinationsService();
+        break;
+      default:
+        // This case should not be reachable with TypeScript, but it's good practice
+        throw new Error(`Unsupported LLM provider: ${provider}`);
     }
   }
 
@@ -21,7 +32,12 @@ export class LLMService {
     model: string,
     goal: string,
     files: StoredFile[],
+    options?: { [key: string]: any }
   ): Promise<Task[]> {
+    if (this.service instanceof PollinationsService) {
+      return this.service.breakDownGoalIntoTasks(model, goal, files, options);
+    }
+    // For other services, call without the options parameter
     return this.service.breakDownGoalIntoTasks(model, goal, files);
   }
 
@@ -31,8 +47,25 @@ export class LLMService {
     goal: string,
     completedTasks: TaskOutput[],
     files: StoredFile[],
-    useSearch: boolean
+    useSearch: boolean,
+    options?: { [key: string]: any }
   ): Promise<TaskOutput> {
+     if (this.service instanceof PollinationsService) {
+      return this.service.executeTask(model, task, goal, completedTasks, files, useSearch, options);
+    }
+    // For other services, call without the options parameter
     return this.service.executeTask(model, task, goal, completedTasks, files, useSearch);
+  }
+
+  async synthesizeFinalResult(
+    model: string,
+    goal: string,
+    completedTasks: TaskOutput[],
+    options?: { [key: string]: any }
+  ): Promise<string> {
+    if (this.service instanceof PollinationsService) {
+      return this.service.synthesizeFinalResult(model, goal, completedTasks, options);
+    }
+    return this.service.synthesizeFinalResult(model, goal, completedTasks);
   }
 }

@@ -1,8 +1,9 @@
+
 import React from 'react';
 
 interface ModelProviderSelectorProps {
-  provider: 'gemini' | 'openrouter';
-  setProvider: (provider: 'gemini' | 'openrouter') => void;
+  provider: 'gemini' | 'openrouter' | 'pollinations';
+  setProvider: (provider: 'gemini' | 'openrouter' | 'pollinations') => void;
   disabled: boolean;
 }
 
@@ -10,12 +11,13 @@ export const ModelProviderSelector: React.FC<ModelProviderSelectorProps> = ({ pr
   const providers = [
     { id: 'gemini', name: 'Google Gemini' },
     { id: 'openrouter', name: 'OpenRouter' },
+    { id: 'pollinations', name: 'Pollinations (Free)' },
   ];
 
   return (
     <div>
       <label className="block text-sm font-medium text-gray-300 mb-2">LLM Provider</label>
-      <fieldset className="grid grid-cols-2 gap-4">
+      <fieldset className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <legend className="sr-only">LLM Provider Selection</legend>
         {providers.map((p) => (
           <div key={p.id}>
@@ -31,7 +33,7 @@ export const ModelProviderSelector: React.FC<ModelProviderSelectorProps> = ({ pr
                 name="provider"
                 value={p.id}
                 checked={provider === p.id}
-                onChange={() => setProvider(p.id as 'gemini' | 'openrouter')}
+                onChange={() => setProvider(p.id as 'gemini' | 'openrouter' | 'pollinations')}
                 disabled={disabled}
                 className="sr-only"
               />

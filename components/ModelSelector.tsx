@@ -1,13 +1,14 @@
 
 import React from 'react';
-import { OpenRouterModel } from '../services/llmService';
+import { OpenRouterModel, PollinationsModel } from '../services/llmService';
 
 interface ModelSelectorProps {
   model: string;
   setModel: (model: string) => void;
   disabled: boolean;
-  provider: 'gemini' | 'openrouter';
+  provider: 'gemini' | 'openrouter' | 'pollinations';
   openRouterModels: OpenRouterModel[];
+  pollinationsModels: PollinationsModel[];
   isFetchingModels: boolean;
 }
 
@@ -16,7 +17,35 @@ const GEMINI_MODELS = [
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (complex reasoning)' },
 ];
 
-export const ModelSelector: React.FC<ModelSelectorProps> = ({ model, setModel, disabled, provider, openRouterModels, isFetchingModels }) => {
+export const ModelSelector: React.FC<ModelSelectorProps> = ({ model, setModel, disabled, provider, openRouterModels, pollinationsModels, isFetchingModels }) => {
+  
+  const renderOptions = () => {
+    switch (provider) {
+      case 'gemini':
+        return GEMINI_MODELS.map((m) => (
+          <option key={m.id} value={m.id}>{m.name}</option>
+        ));
+      case 'openrouter':
+        if (isFetchingModels) return <option>Loading models...</option>;
+        if (openRouterModels.length > 0) {
+          return openRouterModels.map((m) => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ));
+        }
+        return <option>Set API key to load models</option>;
+      case 'pollinations':
+        if (isFetchingModels) return <option>Loading models...</option>;
+        if (pollinationsModels.length > 0) {
+          return pollinationsModels.map((m) => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ));
+        }
+        return <option>Could not load models</option>;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div>
       <label htmlFor="model-selector" className="block text-sm font-medium text-gray-300 mb-2">
@@ -29,25 +58,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ model, setModel, d
         disabled={disabled}
         className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 disabled:opacity-50"
       >
-        {provider === 'gemini' ? (
-          GEMINI_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))
-        ) : (
-          isFetchingModels ? (
-            <option>Loading models...</option>
-          ) : openRouterModels.length > 0 ? (
-            openRouterModels.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))
-          ) : (
-            <option>Set API key to load models</option>
-          )
-        )}
+        {renderOptions()}
       </select>
     </div>
   );

@@ -75,7 +75,7 @@ export class OpenRouterService {
     async breakDownGoalIntoTasks(
         model: string,
         goal: string,
-        files: StoredFile[],
+        files: StoredFile[]
     ): Promise<Task[]> {
         const fileContext = files.map(f => `File: ${f.name}\nContent:\n${f.content}`).join('\n\n---\n\n');
         const prompt = `
@@ -184,5 +184,58 @@ If you use web search, please cite your sources with full URLs in a "References"
             output: output,
             citations: citations,
         };
+    }
+
+    async synthesizeFinalResult(
+        model: string,
+        goal: string,
+        completedTasks: TaskOutput[]
+    ): Promise<string> {
+        const completedTasksContext = completedTasks
+            .map(t => `Task: ${t.taskDescription}\nOutput:\n${t.output}`)
+            .join('\n\n---\n\n');
+
+        const prompt = `
+You are a master synthesizer. Your job is to take a user's original goal and the raw outputs from a series of automated tasks, and transform them into a final, polished, and coherent result.
+
+**Primary Goal:**
+${goal}
+
+**Individual Task Outputs:**
+---
+${completedTasksContext}
+---
+
+**Your Instructions:**
+1.  Carefully review the Primary Goal. This is the ultimate objective.
+2.  Analyze the individual task outputs. These are the raw materials and building blocks.
+3.  Synthesize a single, final response that directly and completely fulfills the Primary Goal.
+4.  **DO NOT** simply list or repeat the task outputs. Integrate them intelligently.
+5.  If the goal was to create a single artifact (e.g., a summary, a document, a piece of code), your response should be ONLY that artifact.
+6.  If the goal was a question, your response should be the final, complete answer.
+7.  The final output should be clean, well-formatted, and ready for the user. Eliminate any redundancy or intermediate steps present in the task outputs.
+
+Produce ONLY the final, synthesized result.
+`;
+
+        const body = JSON.stringify({
+            model: model,
+            messages: [{ role: 'user', content: prompt }]
+        });
+
+        const response = await fetch(`${OPENROUTER_API_BASE}/chat/completions`, {
+            method: 'POST',
+            headers: this.headers,
+            body: body
+        });
+        
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error("OpenRouter Synthesis Error:", errorBody);
+            throw new Error(`OpenRouter API error during synthesis (${response.status}): ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return data.choices[0]?.message?.content || "The model could not synthesize a final result.";
     }
 }

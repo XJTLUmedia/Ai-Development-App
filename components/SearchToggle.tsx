@@ -1,18 +1,25 @@
+
 import React from 'react';
 
 interface SearchToggleProps {
   useSearch: boolean;
   setUseSearch: (useSearch: boolean) => void;
   disabled: boolean;
-  provider: 'gemini' | 'openrouter';
+  provider: 'gemini' | 'openrouter' | 'pollinations';
 }
 
 export const SearchToggle: React.FC<SearchToggleProps> = ({ useSearch, setUseSearch, disabled, provider }) => {
   const toggleClasses = useSearch ? 'bg-blue-600' : 'bg-gray-600';
   const dotClasses = useSearch ? 'translate-x-5' : 'translate-x-0';
-  const labelText = provider === 'gemini' 
-    ? "Use Google Search for up-to-date information" 
-    : "Use OpenRouter Web Search for up-to-date information";
+  
+  let labelText = "Use web search for up-to-date information";
+  if (provider === 'gemini') {
+    labelText = "Use Google Search for up-to-date information";
+  } else if (provider === 'openrouter') {
+    labelText = "Use OpenRouter Web Search for up-to-date information";
+  } else if (provider === 'pollinations') {
+    labelText = "Use search-enabled model for up-to-date information";
+  }
 
   return (
     <div>
