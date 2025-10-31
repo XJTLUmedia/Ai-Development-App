@@ -28,3 +28,43 @@ export interface TaskOutput {
   output: string;
   citations: Citation[];
 }
+
+// Data for CalendarEvent module
+export interface CalendarEventData {
+  '@type': 'CalendarEvent';
+  summary: string;
+  description: string;
+  start: string;
+  end: string;
+  location: string;
+}
+
+// Data for MapDisplay module
+export interface MapData {
+  '@type': 'Map';
+  latitude: number;
+  longitude: number;
+  label: string;
+  zoom?: number;
+}
+
+// Data for ChartDisplay module (expects an SVG string)
+export interface ChartData {
+  '@type': 'Chart';
+  title: string;
+  svg: string;
+}
+
+// Data for HtmlPreview module
+export interface HtmlSnippetData {
+  '@type': 'HtmlSnippet';
+  html: string;
+  css?: string;
+  js?: string;
+}
+
+// Data for DataTable module
+export interface DataTableData {
+  headers: string[];
+  rows: (string | number | null)[][];
+}

@@ -83,10 +83,54 @@ Current Task to Execute:
 ${task.description}
 
 Based on all the provided context, generate the precise output required to complete this task.
-If the task involves writing code, provide only the code.
-If it involves explaining a concept, provide a clear and concise explanation.
-If it involves creating a file, provide the full file content.
 Do not add any extra commentary, greetings, or explanations beyond what the task requires.
+
+**SPECIAL INSTRUCTIONS FOR OUTPUT FORMATTING:**
+Your output format depends on the nature of the task. Follow these rules precisely:
+
+1.  **For Calendar Events:** If the task is to create a calendar event, appointment, or meeting, you MUST format the output as a single JSON object with the following structure:
+    \`\`\`json
+    {
+      "@type": "CalendarEvent",
+      "summary": "Event Title",
+      "description": "A brief description of the event.",
+      "start": "YYYY-MM-DDTHH:mm:ss",
+      "end": "YYYY-MM-DDTHH:mm:ss",
+      "location": "Event Location"
+    }
+    \`\`\`
+
+2.  **For Geographic Locations/Maps:** If the task involves finding a location or coordinates, you MUST format the output as a single JSON object:
+    \`\`\`json
+    {
+      "@type": "Map",
+      "latitude": 40.7128,
+      "longitude": -74.0060,
+      "label": "A descriptive label for the pin"
+    }
+    \`\`\`
+
+3.  **For Data Visualization/Charts:** If the task is to create a chart or graph, you MUST generate a self-contained SVG string representing that chart. Format the output as a single JSON object:
+    \`\`\`json
+    {
+      "@type": "Chart",
+      "title": "Title of the Chart",
+      "svg": "<svg width='400' height='200' xmlns='http://www.w3.org/2000/svg'>...</svg>"
+    }
+    \`\`\`
+    **IMPORTANT SVG REQUIREMENTS:** The SVG must be visually appealing on a dark background. Use light-colored text (e.g., white, #d1d5db) and vibrant, distinct colors for data elements. Include necessary labels and axes.
+
+4.  **For HTML UI Components:** If the task is to create a piece of UI, like a form or a button, you MUST format the output as a single JSON object.
+    \`\`\`json
+    {
+      "@type": "HtmlSnippet",
+      "html": "<div>Your HTML here</div>",
+      "css": "div { color: hotpink; }",
+      "js": "console.log('Hello from the snippet');"
+    }
+    \`\`\`
+
+5.  **For ALL OTHER tasks (e.g., writing code, explaining concepts, creating a file):** Provide the output as plain text, markdown, or a code block. Do not wrap it in a JSON object.
 `;
         const config: any = {};
         if (useSearch) {
@@ -99,7 +143,7 @@ Do not add any extra commentary, greetings, or explanations beyond what the task
             config: config,
         });
 
-        const output = response.text;
+        const output = response.text.replace(/```json\n?([\s\S]*?)\n?```/, '$1').trim();
         const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
         const citations: Citation[] = [];
         if (groundingMetadata?.groundingChunks) {
@@ -145,7 +189,7 @@ ${completedTasksContext}
 1.  Carefully review the Primary Goal. This is the ultimate objective.
 2.  Analyze the individual task outputs. These are the raw materials and building blocks.
 3.  Synthesize a single, final response that directly and completely fulfills the Primary Goal.
-4.  **DO NOT** simply list or repeat the task outputs. Integrate them intelligently.
+4.  **DO NOT** simply list or repeat the task outputs. Integrate them intelligently. If an output is a JSON object like a CalendarEvent or Map, describe it in the final summary in a human-readable way. Do not include the raw JSON in the final result.
 5.  If the goal was to create a single artifact (e.g., a summary, a document, a piece of code), your response should be ONLY that artifact.
 6.  If the goal was a question, your response should be the final, complete answer.
 7.  The final output should be clean, well-formatted, and ready for the user. Eliminate any redundancy or intermediate steps present in the task outputs.

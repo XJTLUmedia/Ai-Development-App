@@ -299,6 +299,45 @@ Current Task: "${task.description}"
 
 Based on the provided context, generate the precise output for the task.
 Do not add any extra commentary, greetings, or explanations beyond what the task requires.
+
+**SPECIAL INSTRUCTIONS FOR OUTPUT FORMATTING:**
+Your output format depends on the nature of the task. Follow these rules precisely:
+
+1.  **For Calendar Events:** If the task is to create a calendar event, appointment, or meeting, you MUST format the output as a single, valid JSON object. Do not wrap it in markdown.
+    {
+      "@type": "CalendarEvent",
+      "summary": "Event Title",
+      "description": "A brief description of the event.",
+      "start": "YYYY-MM-DDTHH:mm:ss",
+      "end": "YYYY-MM-DDTHH:mm:ss",
+      "location": "Event Location"
+    }
+
+2.  **For Geographic Locations/Maps:** If the task involves finding a location or coordinates, you MUST format the output as a single, valid JSON object:
+    {
+      "@type": "Map",
+      "latitude": 40.7128,
+      "longitude": -74.0060,
+      "label": "A descriptive label for the pin"
+    }
+
+3.  **For Data Visualization/Charts:** If the task is to create a chart or graph, you MUST generate a self-contained SVG string representing that chart. Format the output as a single, valid JSON object:
+    {
+      "@type": "Chart",
+      "title": "Title of the Chart",
+      "svg": "<svg width='400' height='200' xmlns='http://www.w3.org/2000/svg'>...</svg>"
+    }
+    **IMPORTANT SVG REQUIREMENTS:** The SVG must be visually appealing on a dark background. Use light-colored text (e.g., white, #d1d5db) and vibrant, distinct colors for data elements.
+
+4.  **For HTML UI Components:** If the task is to create a piece of UI, you MUST format the output as a single, valid JSON object.
+    {
+      "@type": "HtmlSnippet",
+      "html": "<div>Your HTML here</div>",
+      "css": "div { color: hotpink; }",
+      "js": "console.log('Hello from the snippet');"
+    }
+
+5.  **For ALL OTHER tasks (e.g., writing code, explaining concepts):** Provide the output as plain text, markdown, or a code block. Do not wrap it in JSON.
 ${searchInstruction}
 `;
 
@@ -310,7 +349,6 @@ ${searchInstruction}
             const promptOverhead = 1000; // Reserve space for the summarization prompt's own instructions
             const maxContextSizeForSummarization = POLLINATIONS_SAFE_CHAR_LIMIT - promptOverhead;
             
-            // Truncate the combined context to ensure the summarization prompt itself doesn't fail
             const contextToSummarize = contextForPrompt.length > maxContextSizeForSummarization
                 ? contextForPrompt.substring(0, maxContextSizeForSummarization) + "\n\n...[CONTEXT TRUNCATED]..."
                 : contextForPrompt;
@@ -362,6 +400,23 @@ ${searchInstruction}
           return { taskId: task.id, taskDescription: task.description, output: "The model returned an empty response.", citations: [] };
         }
 
+        const strippedContent = this.stripMarkdown(rawContent);
+
+        try {
+            // Check if the output is one of our special JSON objects
+            const parsed = JSON.parse(strippedContent);
+            if (parsed['@type']) {
+                return {
+                    taskId: task.id,
+                    taskDescription: task.description,
+                    output: strippedContent, // Return the clean JSON string
+                    citations: [],
+                }
+            }
+        } catch (e) {
+            // Not a JSON object, proceed as normal text
+        }
+        
         const { output, citations } = this.extractCitationsFromText(rawContent);
 
         return {

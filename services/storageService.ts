@@ -1,5 +1,5 @@
 
-import { StoredFile } from '../types';
+import { StoredFile, DataTableData } from '../types';
 import * as mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
 import * as XLSX from 'xlsx';
@@ -48,6 +48,28 @@ class StorageService {
     } catch (error) {
         console.error(`Error processing .${extension} file:`, error);
         throw new Error(`Failed to read content from ${file.name}. The file might be corrupted or in an unsupported format.`);
+    }
+  }
+
+  public async parseXlsxToJson(file: File): Promise<DataTableData> {
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (jsonData.length === 0) {
+            return { headers: [], rows: [] };
+        }
+
+        const headers = jsonData[0].map(header => String(header));
+        const rows = jsonData.slice(1);
+        
+        return { headers, rows };
+    } catch (error) {
+        console.error(`Error parsing .xlsx file to JSON:`, error);
+        throw new Error(`Failed to parse ${file.name}. The file might be corrupted.`);
     }
   }
 

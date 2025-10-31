@@ -11,6 +11,7 @@
       /* For custom scrollbars to match dark theme */
       ::-webkit-scrollbar {
         width: 8px;
+        height: 8px;
       }
       ::-webkit-scrollbar-track {
         background: #1f2937; /* bg-gray-800 */
@@ -80,6 +81,77 @@
         padding: 0.2em 0.4em;
         border-radius: 0.3rem;
         color: #e5e7eb; /* text-gray-200 */
+      }
+      /* DataTable styles */
+      .datatable-container {
+        max-height: 70vh;
+        overflow: auto;
+        border-radius: 0.5rem;
+        border: 1px solid #374151; /* border-gray-700 */
+      }
+      .datatable {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 600px;
+      }
+      .datatable th, .datatable td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid #374151; /* border-gray-700 */
+        white-space: nowrap;
+      }
+      .datatable th {
+        background-color: #1f2937; /* bg-gray-800 */
+        font-weight: 600;
+        color: #d1d5db; /* text-gray-300 */
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+      .datatable tbody tr:nth-child(even) {
+        background-color: #111827; /* bg-gray-900 */
+      }
+      .datatable tbody tr:hover {
+        background-color: #374151; /* bg-gray-700 */
+      }
+      /* Custom styles for details/summary dropdown */
+      .task-output-details {
+        background-color: #1f2937; /* bg-gray-800 */
+        border-radius: 0.5rem;
+        overflow: hidden;
+        border: 1px solid #374151; /* border-gray-700 */
+      }
+      .task-output-details summary {
+        padding: 1rem;
+        cursor: pointer;
+        font-weight: 600;
+        color: #d1d5db; /* text-gray-300 */
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        list-style: none; /* Hide default marker */
+        transition: background-color 0.2s;
+      }
+      .task-output-details summary:hover {
+        background-color: #374151; /* bg-gray-700 */
+      }
+      .task-output-details summary::-webkit-details-marker {
+        display: none; /* Hide default marker for Chrome/Safari */
+      }
+      .task-output-details .summary-content {
+        flex-grow: 1;
+        padding-right: 1rem;
+      }
+      .task-output-details .summary-chevron {
+        transition: transform 0.2s;
+        flex-shrink: 0;
+      }
+      .task-output-details[open] > summary .summary-chevron {
+        transform: rotate(90deg);
+      }
+      .task-output-details-body {
+        padding: 0 1rem 1rem 1rem;
+        border-top: 1px solid #374151; /* border-gray-700 */
       }
     </style>
   <script type="importmap">
