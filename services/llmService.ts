@@ -1,9 +1,9 @@
 import { StoredFile, Task, TaskOutput } from '../types';
 import { GeminiService } from './geminiService';
 import { OpenRouterService, OpenRouterModel, fetchOpenRouterModels } from './openrouterService';
-import { PollinationsService, PollinationsModel, fetchPollinationsModels } from './pollinationsService';
+import { PollinationsService, PollinationsModel, fetchPollinationsModels, parseDynamicParameters } from './pollinationsService';
 
-export { fetchOpenRouterModels, fetchPollinationsModels };
+export { fetchOpenRouterModels, fetchPollinationsModels, parseDynamicParameters };
 export type { OpenRouterModel, PollinationsModel };
 
 export class LLMService {

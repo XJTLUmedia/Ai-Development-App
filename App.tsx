@@ -9,7 +9,7 @@ import { OutputDisplay } from './components/OutputDisplay';
 import { FinalResultDisplay } from './components/FinalResultDisplay';
 import { DataTable } from './components/DataTable';
 import { storageService } from './services/storageService';
-import { LLMService, OpenRouterModel, PollinationsModel, fetchOpenRouterModels, fetchPollinationsModels } from './services/llmService';
+import { LLMService, OpenRouterModel, PollinationsModel, fetchOpenRouterModels, fetchPollinationsModels, parseDynamicParameters } from './services/llmService';
 import { StoredFile, Task, TaskStatus, TaskOutput, DataTableData } from './types';
 import { ModelProviderSelector } from './components/ModelProviderSelector';
 import { ApiKeyInput } from './components/ApiKeyInput';
@@ -199,12 +199,14 @@ const App: React.FC = () => {
       const apiKey = provider === 'gemini' ? geminiApiKey : openRouterApiKey;
       const llmService = new LLMService(provider, apiKey);
 
-      let modelOptions: { maxInputChars?: number } | undefined;
+      let modelOptions: { [key: string]: any } = {};
         if (provider === 'pollinations') {
             const selectedModel = pollinationsModels.find(m => m.id === model);
-            if (selectedModel) { // Check if selectedModel is found
-                modelOptions = { maxInputChars: selectedModel.maxInputChars };
-            }
+            const dynamicParams = parseDynamicParameters(goal);
+            modelOptions = { 
+                maxInputChars: selectedModel?.maxInputChars,
+                ...dynamicParams
+            };
         }
 
       // Step 1: Break down goal into tasks
@@ -314,7 +316,7 @@ const App: React.FC = () => {
               />
               {provider === 'pollinations' && (
                   <p className="text-xs text-gray-400 italic text-center -mt-4">
-                      (due to free tier character limit, if you reading files over 20000 characters, it have to break down into small pieces and running many API calls. it will be slow, please be aware)
+                      The free tier intelligently breaks down large documents to process complex goals, which may take longer.
                   </p>
               )}
 
@@ -370,7 +372,7 @@ const App: React.FC = () => {
               </div>
             )}
 
-            <TaskList tasks={tasks} />
+            <TaskList tasks={tasks} completedOutputsCount={outputs.length} />
             
             <OutputDisplay outputs={outputs} />
 
