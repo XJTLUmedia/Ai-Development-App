@@ -1,0 +1,5 @@
+{
+  "name": "Gemini RAG Assistant",
+  "description": "An intelligent assistant that uses Retrieval-Augmented Generation (RAG) to analyze uploaded documents, create a logical plan, and execute tasks to achieve a user-defined goal.",
+  "requestFramePermissions": []
+}

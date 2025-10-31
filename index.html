@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLM RAG Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <style>
+      /* For custom scrollbars to match dark theme */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1f2937; /* bg-gray-800 */
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #4b5563; /* bg-gray-600 */
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #6b7280; /* bg-gray-500 */
+      }
+      /* Custom styles for rendered markdown */
+      .markdown-preview {
+        color: #d1d5db; /* text-gray-300 */
+        line-height: 1.7;
+      }
+      .markdown-preview h1, .markdown-preview h2, .markdown-preview h3, .markdown-preview h4 {
+        color: #f9fafb; /* text-gray-50 */
+        font-weight: 600;
+        margin-top: 1.25em;
+        margin-bottom: 0.5em;
+        border-bottom: 1px solid #374151; /* border-gray-700 */
+        padding-bottom: 0.3em;
+      }
+      .markdown-preview h1 { font-size: 1.875rem; }
+      .markdown-preview h2 { font-size: 1.5rem; }
+      .markdown-preview h3 { font-size: 1.25rem; }
+      .markdown-preview p {
+        margin-bottom: 1em;
+      }
+      .markdown-preview a {
+        color: #60a5fa; /* text-blue-400 */
+        text-decoration: underline;
+        transition: color 0.2s;
+      }
+      .markdown-preview a:hover {
+        color: #93c5fd; /* text-blue-300 */
+      }
+      .markdown-preview ul, .markdown-preview ol {
+        padding-left: 1.5em;
+        margin-bottom: 1em;
+      }
+      .markdown-preview ul { list-style-type: disc; }
+      .markdown-preview ol { list-style-type: decimal; }
+      .markdown-preview li { margin-bottom: 0.25em; }
+      .markdown-preview blockquote {
+        border-left: 4px solid #4b5563; /* border-gray-600 */
+        padding-left: 1em;
+        margin-left: 0;
+        margin-bottom: 1em;
+        font-style: italic;
+        color: #9ca3af; /* text-gray-400 */
+      }
+      .markdown-preview pre {
+        background-color: #111827; /* bg-gray-900 */
+        padding: 1em;
+        border-radius: 0.5rem;
+        margin-bottom: 1em;
+        overflow-x: auto;
+      }
+      .markdown-preview code {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.9em;
+      }
+      .markdown-preview code:not(pre > code) {
+        background-color: #374151; /* bg-gray-700 */
+        padding: 0.2em 0.4em;
+        border-radius: 0.3rem;
+        color: #e5e7eb; /* text-gray-200 */
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
+    "marked": "https://aistudiocdn.com/marked@^14.0.0",
+    "highlight.js": "https://aistudiocdn.com/highlight.js@^11.11.0",
+    "mammoth": "https://aistudiocdn.com/mammoth@^1.7.2",
+    "pdfjs-dist": "https://aistudiocdn.com/pdfjs-dist@^4.4.178",
+    "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5"
+  }
+}
+</script>
+</head>
+  <body class="bg-gray-900 text-gray-200">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
