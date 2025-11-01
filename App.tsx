@@ -13,6 +13,7 @@ import { LLMService, OpenRouterModel, PollinationsModel, fetchOpenRouterModels, 
 import { StoredFile, Task, TaskStatus, TaskOutput, DataTableData } from './types';
 import { ModelProviderSelector } from './components/ModelProviderSelector';
 import { ApiKeyInput } from './components/ApiKeyInput';
+import { PollinationsProgress } from './components/PollinationsProgress';
 
 const App: React.FC = () => {
   const [goal, setGoal] = useState<string>('');
@@ -35,6 +36,7 @@ const App: React.FC = () => {
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [apiProgress, setApiProgress] = useState({ completed: 0, total: 0 });
 
   // For DataTable module
   const [fileObjects, setFileObjects] = useState<Map<string, File>>(new Map());
@@ -174,6 +176,7 @@ const App: React.FC = () => {
     setFiles([]);
     setFileObjects(new Map());
     setViewingExcelFile(null);
+    setApiProgress({ completed: 0, total: 0 });
     isCancelledRef.current = false;
   };
   
@@ -189,11 +192,15 @@ const App: React.FC = () => {
     
     isCancelledRef.current = false;
     setIsProcessing(true);
-    setProcessingStatus('Generating plan...');
     setError(null);
     setTasks([]);
     setOutputs([]);
     setFinalResult(null);
+    setApiProgress({ completed: 0, total: 0 });
+
+    const handleApiProgress = (progress: { completed: number; total: number; }) => {
+        setApiProgress({ completed: progress.completed, total: progress.total });
+    };
 
     try {
       const apiKey = provider === 'gemini' ? geminiApiKey : openRouterApiKey;
@@ -205,11 +212,13 @@ const App: React.FC = () => {
             const dynamicParams = parseDynamicParameters(goal);
             modelOptions = { 
                 maxInputChars: selectedModel?.maxInputChars,
-                ...dynamicParams
+                ...dynamicParams,
+                onProgress: handleApiProgress
             };
         }
 
       // Step 1: Break down goal into tasks
+      setProcessingStatus('Stage 1/3: Breaking down goal...');
       const generatedTasks = await llmService.breakDownGoalIntoTasks(model, goal, files, modelOptions);
       
       if (isCancelledRef.current) {
@@ -225,8 +234,9 @@ const App: React.FC = () => {
         if (isCancelledRef.current) {
             throw new Error('Process stopped by user.');
         }
-
-        setProcessingStatus(`Executing task ${i + 1} of ${generatedTasks.length}...`);
+        
+        setApiProgress({ completed: 0, total: 0 }); // Reset for new task
+        setProcessingStatus(`Stage 2/3: Executing task ${i + 1} of ${generatedTasks.length}...`);
         setTasks(prevTasks => prevTasks.map(t =>
           t.id === task.id ? { ...t, status: TaskStatus.IN_PROGRESS } : t
         ));
@@ -241,7 +251,8 @@ const App: React.FC = () => {
       }
 
       // Step 3: Synthesize final result
-      setProcessingStatus('Synthesizing final result...');
+      setApiProgress({ completed: 0, total: 0 });
+      setProcessingStatus('Stage 3/3: Synthesizing final result...');
       if (isCancelledRef.current) {
         throw new Error('Process stopped by user.');
       }
@@ -333,7 +344,7 @@ const App: React.FC = () => {
 
             <div className="mt-8 pt-6 border-t border-gray-700 flex items-center justify-between gap-4">
               {isProcessing ? (
-                  <div className="flex items-center gap-4 w-full">
+                  <div className="flex items-center justify-between gap-4 w-full">
                       <button
                           onClick={handleStop}
                           className="px-8 py-3 border border-transparent font-semibold rounded-lg text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-red-500 flex items-center justify-center transition-all duration-200"
@@ -343,9 +354,19 @@ const App: React.FC = () => {
                           </svg>
                           Stop
                       </button>
-                      <div className="flex items-center text-gray-300">
-                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                          <span>{processingStatus}</span>
+                      <div className="flex-grow min-w-0">
+                          {provider === 'pollinations' && apiProgress.total > 0 ? (
+                            <PollinationsProgress
+                              completedCalls={apiProgress.completed}
+                              totalCalls={apiProgress.total}
+                              statusText={processingStatus}
+                            />
+                          ) : (
+                            <div className="flex items-center text-gray-300">
+                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                <span>{processingStatus}</span>
+                            </div>
+                          )}
                       </div>
                   </div>
               ) : (
