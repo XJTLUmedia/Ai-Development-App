@@ -68,3 +68,9 @@ export interface DataTableData {
   headers: string[];
   rows: (string | number | null)[][];
 }
+
+// Data for chunk prioritization
+export interface ChunkPriority {
+  chunk_index: number;
+  score: number;
+}

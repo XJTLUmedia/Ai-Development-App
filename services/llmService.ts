@@ -1,3 +1,5 @@
+
+import React from 'react';
 import { StoredFile, Task, TaskOutput } from '../types';
 import { GeminiService } from './geminiService';
 import { OpenRouterService, OpenRouterModel, fetchOpenRouterModels } from './openrouterService';
@@ -7,7 +9,7 @@ export { fetchOpenRouterModels, fetchPollinationsModels, parseDynamicParameters 
 export type { OpenRouterModel, PollinationsModel };
 
 export class LLMService {
-  private service: GeminiService | OpenRouterService | PollinationsService;
+  public service: GeminiService | OpenRouterService | PollinationsService;
   private provider: 'gemini' | 'openrouter' | 'pollinations';
 
   constructor(provider: 'gemini' | 'openrouter' | 'pollinations', apiKey: string) {
@@ -32,12 +34,14 @@ export class LLMService {
     model: string,
     goal: string,
     files: StoredFile[],
-    options?: { [key: string]: any }
+    options: { [key: string]: any } = {},
+    limits: { doc: number, aux: number } = { doc: 0, aux: 0 },
+    isCancelledRef?: React.RefObject<boolean>
   ): Promise<Task[]> {
     if (this.service instanceof PollinationsService) {
-      return this.service.breakDownGoalIntoTasks(model, goal, files, options);
+      return this.service.breakDownGoalIntoTasks(model, goal, files, options, limits, isCancelledRef);
     }
-    // For other services, call without the options parameter
+    // For other services, call without the extra parameters
     return this.service.breakDownGoalIntoTasks(model, goal, files);
   }
 
@@ -48,12 +52,14 @@ export class LLMService {
     completedTasks: TaskOutput[],
     files: StoredFile[],
     useSearch: boolean,
-    options?: { [key: string]: any }
+    options: { [key: string]: any } = {},
+    limits: { doc: number, aux: number } = { doc: 0, aux: 0 },
+    isCancelledRef?: React.RefObject<boolean>
   ): Promise<TaskOutput> {
      if (this.service instanceof PollinationsService) {
-      return this.service.executeTask(model, task, goal, completedTasks, files, useSearch, options);
+      return this.service.executeTask(model, task, goal, completedTasks, files, useSearch, options, limits, isCancelledRef);
     }
-    // For other services, call without the options parameter
+    // For other services, call without the extra parameters
     return this.service.executeTask(model, task, goal, completedTasks, files, useSearch);
   }
 
@@ -61,10 +67,12 @@ export class LLMService {
     model: string,
     goal: string,
     completedTasks: TaskOutput[],
-    options?: { [key: string]: any }
+    options: { [key: string]: any } = {},
+    limits: { doc: number, aux: number } = { doc: 0, aux: 0 },
+    isCancelledRef?: React.RefObject<boolean>
   ): Promise<string> {
     if (this.service instanceof PollinationsService) {
-      return this.service.synthesizeFinalResult(model, goal, completedTasks, options);
+      return this.service.synthesizeFinalResult(model, goal, completedTasks, options, limits, isCancelledRef);
     }
     return this.service.synthesizeFinalResult(model, goal, completedTasks);
   }

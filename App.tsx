@@ -14,6 +14,8 @@ import { StoredFile, Task, TaskStatus, TaskOutput, DataTableData } from './types
 import { ModelProviderSelector } from './components/ModelProviderSelector';
 import { ApiKeyInput } from './components/ApiKeyInput';
 import { PollinationsProgress } from './components/PollinationsProgress';
+import { ApiResourceControlModal } from './components/ApiResourceControlModal';
+import { PollinationsService } from './services/pollinationsService';
 
 const App: React.FC = () => {
   const [goal, setGoal] = useState<string>('');
@@ -36,7 +38,17 @@ const App: React.FC = () => {
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  
   const [apiProgress, setApiProgress] = useState({ completed: 0, total: 0 });
+  const [totalEstimatedCalls, setTotalEstimatedCalls] = useState(0);
+  const [currentStageChunks, setCurrentStageChunks] = useState<{ doc: number, aux: number } | null>(null);
+
+  const [apiResourceControl, setApiResourceControl] = useState<{
+    docChunks: number;
+    auxChunks: number;
+    onConfirm: (limits: { doc: number, aux: number }) => void;
+    onCancel: () => void;
+  } | null>(null);
 
   // For DataTable module
   const [fileObjects, setFileObjects] = useState<Map<string, File>>(new Map());
@@ -127,7 +139,7 @@ const App: React.FC = () => {
 
   const handleFileUploaded = async (uploadedFiles: FileList) => {
     setIsUploading(true);
-    setError(null);
+setError(null);
     try {
       const newFileObjects = new Map(fileObjects);
       for (const file of Array.from(uploadedFiles)) {
@@ -177,19 +189,19 @@ const App: React.FC = () => {
     setFileObjects(new Map());
     setViewingExcelFile(null);
     setApiProgress({ completed: 0, total: 0 });
+    setTotalEstimatedCalls(0);
+    setCurrentStageChunks(null);
+    setApiResourceControl(null);
     isCancelledRef.current = false;
   };
   
   const handleStop = () => {
     isCancelledRef.current = true;
+    setProcessingStatus("Stopping process...");
+    setApiResourceControl(null); // Close modal on stop
   };
 
-  const handleSubmit = async () => {
-    if (!goal.trim()) {
-      setError('Please define a primary goal.');
-      return;
-    }
-    
+  const executePollinationsFlow = async () => {
     isCancelledRef.current = false;
     setIsProcessing(true);
     setError(null);
@@ -197,51 +209,253 @@ const App: React.FC = () => {
     setOutputs([]);
     setFinalResult(null);
     setApiProgress({ completed: 0, total: 0 });
+    setTotalEstimatedCalls(0);
 
-    const handleApiProgress = (progress: { completed: number; total: number; }) => {
-        setApiProgress({ completed: progress.completed, total: progress.total });
+    const llmService = new LLMService('pollinations', '');
+    const pollService = llmService.service as PollinationsService;
+    const selectedModel = pollinationsModels.find(m => m.id === model);
+    const dynamicParams = parseDynamicParameters(goal);
+    const modelOptionsBase = { 
+        maxInputChars: selectedModel?.maxInputChars,
+        ...dynamicParams
+    };
+    const fileContext = files.map(f => f.content).join('\n\n');
+
+    let cumulativeCompleted = 0;
+    
+    // --- Stage 1: Planning ---
+    const runPlanningStage = async (limits: { doc: number, aux: number }) => {
+      try {
+        setProcessingStatus('Stage 1/3: Breaking down goal...');
+        const planningEstimates = pollService.estimateApiCalls(modelOptionsBase, fileContext, goal);
+        setCurrentStageChunks({ doc: planningEstimates.mainCount, aux: planningEstimates.auxCount });
+
+        const initialTotal = limits.doc * limits.aux || planningEstimates.total;
+        setTotalEstimatedCalls(initialTotal);
+        
+        let lastReportedCompletedForStage = 0;
+        const planningProgressHandler = (progress: { completed: number; total: number; stage?: string }) => {
+          if (isCancelledRef.current) return;
+          lastReportedCompletedForStage = progress.completed;
+          setApiProgress({ completed: cumulativeCompleted + progress.completed, total: initialTotal });
+        };
+
+        const generatedTasks = await llmService.breakDownGoalIntoTasks(model, goal, files, { ...modelOptionsBase, onProgress: planningProgressHandler }, limits, isCancelledRef);
+        if (isCancelledRef.current) throw new Error('Process stopped by user.');
+        
+        cumulativeCompleted += lastReportedCompletedForStage;
+        setTasks(generatedTasks);
+
+        let executionAndSynthEstimate = 0;
+        let tempOutputs: TaskOutput[] = [];
+        for (const task of generatedTasks) {
+            const completedTasksContext = tempOutputs.map(t => `Completed Task: ${t.taskDescription}\nOutput:\n${t.output}`).join('\n\n');
+            const taskEstimates = pollService.estimateApiCalls(modelOptionsBase, fileContext, completedTasksContext);
+            executionAndSynthEstimate += taskEstimates.total;
+            tempOutputs.push({ taskId: task.id, taskDescription: task.description, output: '[ESTIMATED_OUTPUT]', citations: [] });
+        }
+        const fullOutputContext = tempOutputs.map(t => `Task: ${t.taskDescription}\nOutput:\n${t.output}`).join('\n\n---\n\n');
+        const synthesisEstimates = pollService.estimateApiCalls(modelOptionsBase, fullOutputContext, goal);
+        executionAndSynthEstimate += synthesisEstimates.total;
+
+        setTotalEstimatedCalls(prevTotal => prevTotal + executionAndSynthEstimate);
+
+        await runExecutionLoop(generatedTasks, []);
+
+      } catch (err) {
+        handleFlowError(err);
+      }
+    };
+    
+    // --- Stage 2: Execution Loop ---
+    const runExecutionLoop = async (tasksToRun: Task[], completedOutputs: TaskOutput[]) => {
+        const newOutputs = [...completedOutputs];
+        for (let i = 0; i < tasksToRun.length; i++) {
+            if (isCancelledRef.current) throw new Error('Process stopped by user.');
+            const task = tasksToRun[i];
+            
+            const runExecutionStage = async (limits: { doc: number, aux: number }) => {
+                try {
+                    setProcessingStatus(`Stage 2/3: Executing task ${i + 1} of ${tasksToRun.length}...`);
+                    setTasks(prevTasks => prevTasks.map(t =>
+                      t.id === task.id ? { ...t, status: TaskStatus.IN_PROGRESS } : t
+                    ));
+                    
+                    const completedTasksContext = newOutputs.map(t => `Completed Task: ${t.taskDescription}\nOutput:\n${t.output}`).join('\n\n');
+                    const taskEstimates = pollService.estimateApiCalls(modelOptionsBase, fileContext, completedTasksContext);
+                    setCurrentStageChunks({ doc: taskEstimates.mainCount, aux: taskEstimates.auxCount });
+
+                    let lastReportedCompletedForStage = 0;
+                    const taskProgressHandler = (progress: { completed: number; total: number; stage?: 'processing' | 'synthesis' }) => {
+                        if (isCancelledRef.current) return;
+                        lastReportedCompletedForStage = progress.completed;
+                        
+                        const baseText = `Stage 2/3: Executing task ${i + 1} of ${tasksToRun.length}...`;
+                        let stageText = '';
+                        if (progress.stage) {
+                            stageText = progress.stage === 'synthesis' ? ' (synthesizing part...)' : ' (processing parts...)';
+                        }
+                        setProcessingStatus(baseText + stageText);
+                        
+                        setApiProgress(prev => ({ ...prev, completed: cumulativeCompleted + progress.completed }));
+                    };
+        
+                    const taskOutput = await llmService.executeTask(model, task, goal, newOutputs, files, useSearch, { ...modelOptionsBase, onProgress: taskProgressHandler }, limits, isCancelledRef);
+                    if (isCancelledRef.current) throw new Error('Process stopped by user.');
+
+                    cumulativeCompleted += lastReportedCompletedForStage;
+                    newOutputs.push(taskOutput);
+                    setOutputs([...newOutputs]);
+        
+                    setTasks(prevTasks => prevTasks.map(t =>
+                      t.id === task.id ? { ...t, status: TaskStatus.COMPLETED } : t
+                    ));
+                } catch (err) {
+                    handleFlowError(err);
+                    throw err; // Stop the loop
+                }
+            };
+            
+            const completedTasksContext = newOutputs.map(t => `Completed Task: ${t.taskDescription}\nOutput:\n${t.output}`).join('\n\n');
+            const taskEstimates = pollService.estimateApiCalls(modelOptionsBase, fileContext, completedTasksContext);
+            setApiProgress(prev => ({ ...prev, total: totalEstimatedCalls }));
+
+            if (taskEstimates.total > 5) {
+                await new Promise<void>(resolve => {
+                    setApiResourceControl({
+                        docChunks: taskEstimates.mainCount,
+                        auxChunks: taskEstimates.auxCount,
+                        onConfirm: async (limits) => {
+                            setApiResourceControl(null);
+                            await runExecutionStage(limits);
+                            resolve();
+                        },
+                        onCancel: () => {
+                            setApiResourceControl(null);
+                            handleStop();
+                            resolve();
+                        }
+                    });
+                });
+            } else {
+                await runExecutionStage({ doc: 0, aux: 0 });
+            }
+        }
+        await runSynthesisStage(newOutputs);
     };
 
+    // --- Stage 3: Synthesis ---
+    const runSynthesisStage = async (finalOutputs: TaskOutput[]) => {
+        const run = async (limits: { doc: number, aux: number }) => {
+            try {
+                setProcessingStatus('Stage 3/3: Synthesizing final result...');
+                if (isCancelledRef.current) throw new Error('Process stopped by user.');
+                
+                const fullOutputContext = finalOutputs.map(t => `Task: ${t.taskDescription}\nOutput:\n${t.output}`).join('\n\n---\n\n');
+                const synthesisEstimates = pollService.estimateApiCalls(modelOptionsBase, fullOutputContext, goal);
+                setCurrentStageChunks({ doc: synthesisEstimates.mainCount, aux: synthesisEstimates.auxCount });
+                setApiProgress(prev => ({...prev, total: totalEstimatedCalls }));
+        
+                let lastReportedCompletedForStage = 0;
+                const synthesisProgressHandler = (progress: { completed: number, total: number }) => {
+                    if (isCancelledRef.current) return;
+                    lastReportedCompletedForStage = progress.completed;
+                    setApiProgress(prev => ({ ...prev, completed: cumulativeCompleted + progress.completed }));
+                };
+                
+                const finalSynthesizedResult = await llmService.synthesizeFinalResult(model, goal, finalOutputs, { ...modelOptionsBase, onProgress: synthesisProgressHandler }, limits, isCancelledRef);
+                setFinalResult(finalSynthesizedResult);
+                setIsProcessing(false);
+                setProcessingStatus('');
+            } catch(err) {
+                handleFlowError(err);
+            }
+        };
+
+        const fullOutputContext = finalOutputs.map(t => `Task: ${t.taskDescription}\nOutput:\n${t.output}`).join('\n\n---\n\n');
+        const synthesisEstimates = pollService.estimateApiCalls(modelOptionsBase, fullOutputContext, goal);
+        if (synthesisEstimates.total > 5) {
+             setApiResourceControl({
+                docChunks: synthesisEstimates.mainCount,
+                auxChunks: synthesisEstimates.auxCount,
+                onConfirm: (limits) => { setApiResourceControl(null); run(limits); },
+                onCancel: () => { setApiResourceControl(null); handleStop(); }
+            });
+        } else {
+            await run({ doc: 0, aux: 0 });
+        }
+    };
+    
+    // --- Error Handling ---
+    const handleFlowError = (err: any) => {
+        console.error(err);
+        const errorMessage = err.message === 'Process stopped by user.' 
+            ? 'Process stopped by user.'
+            : (err.message || 'An unexpected error occurred.');
+        setError(errorMessage);
+        setTasks(prevTasks => prevTasks.map(t =>
+            t.status === TaskStatus.IN_PROGRESS ? { ...t, status: TaskStatus.FAILED } : t
+        ));
+        setIsProcessing(false);
+        setProcessingStatus('');
+    };
+
+    // --- Initial Kick-off ---
+    const planningEstimates = pollService.estimateApiCalls(modelOptionsBase, fileContext, goal);
+    setApiProgress({ completed: 0, total: planningEstimates.total });
+    if (planningEstimates.total > 5) {
+        setApiResourceControl({
+            docChunks: planningEstimates.mainCount,
+            auxChunks: planningEstimates.auxCount,
+            onConfirm: (limits) => { setApiResourceControl(null); runPlanningStage(limits); },
+            onCancel: () => { setApiResourceControl(null); handleStop(); setIsProcessing(false); }
+        });
+    } else {
+        await runPlanningStage({ doc: 0, aux: 0 });
+    }
+  };
+  
+  const handleSubmit = async () => {
+    if (!goal.trim()) {
+      setError('Please define a primary goal.');
+      return;
+    }
+    
+    setIsProcessing(true);
+    setError(null);
+    setTasks([]);
+    setOutputs([]);
+    setFinalResult(null);
+    isCancelledRef.current = false;
+
+    if (provider === 'pollinations') {
+      executePollinationsFlow();
+      return;
+    }
+
+    // Gemini and OpenRouter flow
     try {
       const apiKey = provider === 'gemini' ? geminiApiKey : openRouterApiKey;
       const llmService = new LLMService(provider, apiKey);
 
-      let modelOptions: { [key: string]: any } = {};
-        if (provider === 'pollinations') {
-            const selectedModel = pollinationsModels.find(m => m.id === model);
-            const dynamicParams = parseDynamicParameters(goal);
-            modelOptions = { 
-                maxInputChars: selectedModel?.maxInputChars,
-                ...dynamicParams,
-                onProgress: handleApiProgress
-            };
-        }
-
-      // Step 1: Break down goal into tasks
       setProcessingStatus('Stage 1/3: Breaking down goal...');
-      const generatedTasks = await llmService.breakDownGoalIntoTasks(model, goal, files, modelOptions);
+      const generatedTasks = await llmService.breakDownGoalIntoTasks(model, goal, files, {}, {doc:0, aux:0}, isCancelledRef);
       
-      if (isCancelledRef.current) {
-        throw new Error('Process stopped by user.');
-      }
+      if (isCancelledRef.current) throw new Error('Process stopped by user.');
       
       setTasks(generatedTasks);
 
-      // Step 2: Execute tasks sequentially
       const newOutputs: TaskOutput[] = [];
       for (let i = 0; i < generatedTasks.length; i++) {
         const task = generatedTasks[i];
-        if (isCancelledRef.current) {
-            throw new Error('Process stopped by user.');
-        }
+        if (isCancelledRef.current) throw new Error('Process stopped by user.');
         
-        setApiProgress({ completed: 0, total: 0 }); // Reset for new task
         setProcessingStatus(`Stage 2/3: Executing task ${i + 1} of ${generatedTasks.length}...`);
         setTasks(prevTasks => prevTasks.map(t =>
           t.id === task.id ? { ...t, status: TaskStatus.IN_PROGRESS } : t
         ));
         
-        const taskOutput = await llmService.executeTask(model, task, goal, newOutputs, files, useSearch, modelOptions);
+        const taskOutput = await llmService.executeTask(model, task, goal, newOutputs, files, useSearch, {}, {doc:0, aux:0}, isCancelledRef);
         newOutputs.push(taskOutput);
         setOutputs([...newOutputs]);
 
@@ -250,14 +464,10 @@ const App: React.FC = () => {
         ));
       }
 
-      // Step 3: Synthesize final result
-      setApiProgress({ completed: 0, total: 0 });
       setProcessingStatus('Stage 3/3: Synthesizing final result...');
-      if (isCancelledRef.current) {
-        throw new Error('Process stopped by user.');
-      }
+      if (isCancelledRef.current) throw new Error('Process stopped by user.');
 
-      const finalSynthesizedResult = await llmService.synthesizeFinalResult(model, goal, newOutputs, modelOptions);
+      const finalSynthesizedResult = await llmService.synthesizeFinalResult(model, goal, newOutputs, {}, {doc:0, aux:0}, isCancelledRef);
       setFinalResult(finalSynthesizedResult);
 
     } catch (err: any) {
@@ -358,8 +568,10 @@ const App: React.FC = () => {
                           {provider === 'pollinations' && apiProgress.total > 0 ? (
                             <PollinationsProgress
                               completedCalls={apiProgress.completed}
-                              totalCalls={apiProgress.total}
+                              totalCalls={totalEstimatedCalls}
                               statusText={processingStatus}
+                              docChunks={currentStageChunks?.doc}
+                              auxChunks={currentStageChunks?.aux}
                             />
                           ) : (
                             <div className="flex items-center text-gray-300">
@@ -433,6 +645,14 @@ const App: React.FC = () => {
             <DataTable data={viewingExcelFile.data} />
           </div>
         </div>
+      )}
+      {apiResourceControl && (
+        <ApiResourceControlModal
+            docChunks={apiResourceControl.docChunks}
+            auxChunks={apiResourceControl.auxChunks}
+            onConfirm={apiResourceControl.onConfirm}
+            onCancel={apiResourceControl.onCancel}
+        />
       )}
     </>
   );
