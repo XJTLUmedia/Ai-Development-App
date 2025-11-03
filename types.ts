@@ -1,4 +1,5 @@
 
+
 export enum TaskStatus {
   PENDING = 'PENDING',
   IN_PROGRESS = 'IN_PROGRESS',
@@ -73,4 +74,11 @@ export interface DataTableData {
 export interface ChunkPriority {
   chunk_index: number;
   score: number;
+}
+
+// Data for Chat History
+export interface ChatHistoryItem {
+  id: number;
+  goal: string;
+  result: string;
 }

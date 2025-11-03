@@ -10,12 +10,146 @@ import { FinalResultDisplay } from './components/FinalResultDisplay';
 import { DataTable } from './components/DataTable';
 import { storageService } from './services/storageService';
 import { LLMService, OpenRouterModel, PollinationsModel, fetchOpenRouterModels, fetchPollinationsModels, parseDynamicParameters } from './services/llmService';
-import { StoredFile, Task, TaskStatus, TaskOutput, DataTableData } from './types';
+import { StoredFile, Task, TaskStatus, TaskOutput, DataTableData, ChatHistoryItem } from './types';
 import { ModelProviderSelector } from './components/ModelProviderSelector';
 import { ApiKeyInput } from './components/ApiKeyInput';
 import { PollinationsProgress } from './components/PollinationsProgress';
 import { ApiResourceControlModal } from './components/ApiResourceControlModal';
 import { PollinationsService } from './services/pollinationsService';
+import * as api from './services/apiService';
+import { marked } from 'marked';
+
+
+// NOTE: Due to platform constraints, the AuthModal and HistoryModal components are defined
+// within App.tsx. In a typical React application, these would be in their own files
+// (e.g., components/AuthModal.tsx).
+
+// #region AuthModal Component
+interface AuthModalProps {
+  mode: 'login' | 'register';
+  onClose: () => void;
+  onSuccess: (username: string) => void;
+}
+
+const AuthModal: React.FC<AuthModalProps> = ({ mode, onClose, onSuccess }) => {
+    const [currentMode, setCurrentMode] = useState(mode);
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        setIsLoading(true);
+        try {
+            const action = currentMode === 'login' ? api.login : api.register;
+            const response = await action({ username, password });
+            api.setToken(response.token);
+            onSuccess(response.username);
+        } catch (err: any) {
+            setError(err.message || `An error occurred during ${currentMode}.`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-white">{currentMode === 'login' ? 'Login' : 'Sign Up'}</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white">&times;</button>
+                </div>
+
+                {error && <div className="mb-4 p-3 bg-red-900/50 text-red-300 border border-red-500 rounded-md">{error}</div>}
+                
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <input 
+                        type="text" 
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="Username"
+                        required
+                        className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-200"
+                    />
+                    <input 
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Password"
+                        required
+                        className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-200"
+                    />
+                    <button type="submit" disabled={isLoading} className="w-full px-8 py-3 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600">
+                        {isLoading ? 'Processing...' : (currentMode === 'login' ? 'Login' : 'Create Account')}
+                    </button>
+                </form>
+                <div className="text-center mt-4">
+                    <button onClick={() => setCurrentMode(currentMode === 'login' ? 'register' : 'login')} className="text-sm text-blue-400 hover:underline">
+                        {currentMode === 'login' ? 'Need an account? Sign Up' : 'Already have an account? Login'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+// #endregion
+
+// #region HistoryModal Component
+interface HistoryModalProps {
+    onClose: () => void;
+}
+
+const HistoryModal: React.FC<HistoryModalProps> = ({ onClose }) => {
+    const [history, setHistory] = useState<ChatHistoryItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchHistory = async () => {
+            try {
+                const data = await api.getHistory();
+                setHistory(data);
+            } catch (err: any) {
+                setError(err.message || "Failed to load history.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchHistory();
+    }, []);
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content !max-w-3xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-white">Chat History</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                <div className="max-h-[70vh] overflow-y-auto pr-2">
+                    {isLoading && <p>Loading history...</p>}
+                    {error && <p className="text-red-400">{error}</p>}
+                    {!isLoading && !error && history.length === 0 && <p>No history found.</p>}
+                    <div className="space-y-4">
+                        {history.map(item => (
+                            <details key={item.id} className="bg-gray-900/50 rounded-lg">
+                                <summary className="p-4 cursor-pointer font-semibold text-gray-200">
+                                    {item.goal}
+                                </summary>
+                                <div className="p-4 border-t border-gray-700">
+                                    <div className="markdown-preview" dangerouslySetInnerHTML={{ __html: marked.parse(item.result) }}/>
+                                </div>
+                            </details>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+// #endregion
+
 
 const App: React.FC = () => {
   const [goal, setGoal] = useState<string>('');
@@ -53,12 +187,25 @@ const App: React.FC = () => {
   // For DataTable module
   const [fileObjects, setFileObjects] = useState<Map<string, File>>(new Map());
   const [viewingExcelFile, setViewingExcelFile] = useState<{ name: string; data: DataTableData } | null>(null);
+  
+  // Auth state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState<'login' | 'register' | null>(null);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   const isCancelledRef = useRef(false);
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  useEffect(() => {
+      const user = api.getUserFromToken();
+      if (user) {
+          setIsAuthenticated(true);
+          setCurrentUser(user.username);
+      }
+  }, []);
 
   useEffect(() => {
-    // Load files from storage on initial render
     setFiles(storageService.getFiles());
   }, []);
 
@@ -114,7 +261,6 @@ const App: React.FC = () => {
     }
   }, [openRouterApiKey]);
 
-  // Debounced fetch for OpenRouter models
   useEffect(() => {
     if (provider === 'openrouter') {
       if (debounceTimeoutRef.current) {
@@ -124,9 +270,9 @@ const App: React.FC = () => {
         if (openRouterApiKey.trim()) {
           handleFetchOpenRouterModels();
         } else {
-          setOpenRouterModels([]); // Clear models if key is cleared
+          setOpenRouterModels([]);
         }
-      }, 500); // 500ms debounce
+      }, 500);
     }
 
     return () => {
@@ -139,7 +285,7 @@ const App: React.FC = () => {
 
   const handleFileUploaded = async (uploadedFiles: FileList) => {
     setIsUploading(true);
-setError(null);
+    setError(null);
     try {
       const newFileObjects = new Map(fileObjects);
       for (const file of Array.from(uploadedFiles)) {
@@ -198,7 +344,19 @@ setError(null);
   const handleStop = () => {
     isCancelledRef.current = true;
     setProcessingStatus("Stopping process...");
-    setApiResourceControl(null); // Close modal on stop
+    setApiResourceControl(null);
+  };
+  
+  const handleAuthSuccess = (username: string) => {
+    setIsAuthenticated(true);
+    setCurrentUser(username);
+    setShowAuthModal(null);
+  };
+
+  const handleLogout = () => {
+    api.removeToken();
+    setIsAuthenticated(false);
+    setCurrentUser(null);
   };
 
   const executePollinationsFlow = async () => {
@@ -223,7 +381,6 @@ setError(null);
 
     let cumulativeCompleted = 0;
     
-    // --- Stage 1: Planning ---
     const runPlanningStage = async (limits: { doc: number, aux: number }) => {
       try {
         setProcessingStatus('Stage 1/3: Breaking down goal...');
@@ -267,7 +424,6 @@ setError(null);
       }
     };
     
-    // --- Stage 2: Execution Loop ---
     const runExecutionLoop = async (tasksToRun: Task[], completedOutputs: TaskOutput[]) => {
         const newOutputs = [...completedOutputs];
         for (let i = 0; i < tasksToRun.length; i++) {
@@ -312,7 +468,7 @@ setError(null);
                     ));
                 } catch (err) {
                     handleFlowError(err);
-                    throw err; // Stop the loop
+                    throw err; 
                 }
             };
             
@@ -344,7 +500,6 @@ setError(null);
         await runSynthesisStage(newOutputs);
     };
 
-    // --- Stage 3: Synthesis ---
     const runSynthesisStage = async (finalOutputs: TaskOutput[]) => {
         const run = async (limits: { doc: number, aux: number }) => {
             try {
@@ -365,6 +520,9 @@ setError(null);
                 
                 const finalSynthesizedResult = await llmService.synthesizeFinalResult(model, goal, finalOutputs, { ...modelOptionsBase, onProgress: synthesisProgressHandler }, limits, isCancelledRef);
                 setFinalResult(finalSynthesizedResult);
+
+                api.saveChatHistory(goal, finalSynthesizedResult);
+
                 setIsProcessing(false);
                 setProcessingStatus('');
             } catch(err) {
@@ -386,7 +544,6 @@ setError(null);
         }
     };
     
-    // --- Error Handling ---
     const handleFlowError = (err: any) => {
         console.error(err);
         const errorMessage = err.message === 'Process stopped by user.' 
@@ -400,7 +557,6 @@ setError(null);
         setProcessingStatus('');
     };
 
-    // --- Initial Kick-off ---
     const planningEstimates = pollService.estimateApiCalls(modelOptionsBase, fileContext, goal);
     setApiProgress({ completed: 0, total: planningEstimates.total });
     if (planningEstimates.total > 5) {
@@ -433,7 +589,6 @@ setError(null);
       return;
     }
 
-    // Gemini and OpenRouter flow
     try {
       const apiKey = provider === 'gemini' ? geminiApiKey : openRouterApiKey;
       const llmService = new LLMService(provider, apiKey);
@@ -470,6 +625,8 @@ setError(null);
       const finalSynthesizedResult = await llmService.synthesizeFinalResult(model, goal, newOutputs, {}, {doc:0, aux:0}, isCancelledRef);
       setFinalResult(finalSynthesizedResult);
 
+      api.saveChatHistory(goal, finalSynthesizedResult);
+
     } catch (err: any) {
       console.error(err);
       const errorMessage = err.message === 'Process stopped by user.' 
@@ -496,11 +653,29 @@ setError(null);
     <>
       <div className="bg-gray-900 text-gray-100 min-h-screen font-sans">
         <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
-          <header className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-100">AI Dev Assistant</h1>
-            <p className="text-md text-gray-400 mt-2">
-              Define your goal, provide context files, and let the AI generate a plan and execute it.
-            </p>
+          <header className="mb-8">
+              <div className="flex justify-between items-center">
+                  <div className="text-left">
+                      <h1 className="text-4xl font-bold text-gray-100">AI Dev Assistant</h1>
+                      <p className="text-md text-gray-400 mt-2">
+                        Define a goal, provide context, and let the AI execute a plan.
+                      </p>
+                  </div>
+                  <div className="text-right space-x-2">
+                      {isAuthenticated ? (
+                          <>
+                              <span className="text-gray-300 text-sm">Welcome, {currentUser}!</span>
+                              <button onClick={() => setShowHistoryModal(true)} className="px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-700 rounded-md">History</button>
+                              <button onClick={handleLogout} className="px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-700 rounded-md">Logout</button>
+                          </>
+                      ) : (
+                          <>
+                              <button onClick={() => setShowAuthModal('login')} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Login</button>
+                              <button onClick={() => setShowAuthModal('register')} className="px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-700 rounded-lg">Sign Up</button>
+                          </>
+                      )}
+                  </div>
+              </div>
           </header>
 
           <main className="bg-gray-800/50 rounded-xl p-6 shadow-2xl ring-1 ring-white/10">
@@ -619,6 +794,10 @@ setError(null);
           </footer>
         </div>
       </div>
+      
+      {showAuthModal && <AuthModal mode={showAuthModal} onClose={() => setShowAuthModal(null)} onSuccess={handleAuthSuccess} />}
+      {showHistoryModal && <HistoryModal onClose={() => setShowHistoryModal(false)} />}
+
       {viewingExcelFile && (
         <div 
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center"

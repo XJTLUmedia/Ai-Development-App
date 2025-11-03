@@ -153,6 +153,26 @@
         padding: 0 1rem 1rem 1rem;
         border-top: 1px solid #374151; /* border-gray-700 */
       }
+      /* Modal styles */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+      }
+      .modal-content {
+        background-color: #1f2937; /* bg-gray-800 */
+        border-radius: 0.75rem; /* rounded-xl */
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        ring: 1px solid rgba(255, 255, 255, 0.1);
+        width: 100%;
+        max-width: 28rem; /* max-w-md */
+      }
     </style>
   <script type="importmap">
 {
@@ -166,7 +186,13 @@
     "highlight.js": "https://aistudiocdn.com/highlight.js@^11.11.0",
     "mammoth": "https://aistudiocdn.com/mammoth@^1.7.2",
     "pdfjs-dist": "https://aistudiocdn.com/pdfjs-dist@^4.4.178",
-    "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5"
+    "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5",
+    "process": "https://aistudiocdn.com/process@^0.11.10",
+    "express": "https://aistudiocdn.com/express@^5.1.0",
+    "@zilliz/milvus2-sdk-node": "https://aistudiocdn.com/@zilliz/milvus2-sdk-node@^2.6.3",
+    "cors": "https://aistudiocdn.com/cors@^2.8.5",
+    "jsonwebtoken": "https://aistudiocdn.com/jsonwebtoken@^9.0.2",
+    "bcryptjs": "https://aistudiocdn.com/bcryptjs@^3.0.3"
   }
 }
 </script>

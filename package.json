@@ -17,7 +17,13 @@
     "highlight.js": "^11.11.0",
     "mammoth": "^1.7.2",
     "pdfjs-dist": "^4.4.178",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "process": "^0.11.10",
+    "express": "^5.1.0",
+    "@zilliz/milvus2-sdk-node": "^2.6.3",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^3.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
